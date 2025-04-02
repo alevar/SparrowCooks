@@ -12,12 +12,6 @@ const Footer: React.FC = () => {
                         <Col md={4} className="text-center">
                             <ul className="nav">
                                 <li className="nav-item">
-                                    <Link to="/" className="nav-link px-2 text-body-secondary">Home</Link>
-                                </li>
-                                <li className="nav-item">
-                                    <Link to="/contact" className="nav-link px-2 text-body-secondary">Contact Us</Link>
-                                </li>
-                                <li className="nav-item">
                                     <Link to="/about" className="nav-link px-2 text-body-secondary">About</Link>
                                 </li>
                             </ul>
