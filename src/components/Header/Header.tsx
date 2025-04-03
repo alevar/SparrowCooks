@@ -20,7 +20,9 @@ const Header: React.FC = () => {
                                 <div>
                                     <img src={sparrow_logo} alt="Ales Varabyou Logo" style={{ height: '80px', marginRight: '15px' }} />
                                 </div>
-                                <h1 className="text-dark text-center" style={{ fontFamily: 'Roboto, sans-serif', fontWeight: '500' }}></h1>
+                                <h1 className="text-dark text-center" style={{ fontFamily: 'Roboto, sans-serif', fontWeight: '500' }}>
+                                    Sparrow Cooks
+                                </h1>
                             </Link>
                         </Col>
                     </Row>

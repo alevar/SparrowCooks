@@ -14,6 +14,40 @@ interface Recipe {
   tags: string[];
 }
 
+// Function to parse frontmatter from markdown content
+const parseFrontmatter = (content: string) => {
+  const frontmatterRegex = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/;
+  const match = content.match(frontmatterRegex);
+  
+  if (!match) {
+    return { attributes: {}, body: content };
+  }
+  
+  const frontmatter = match[1];
+  const body = match[2];
+  
+  // Parse frontmatter into key-value pairs
+  const attributes: Record<string, any> = {};
+  frontmatter.split('\n').forEach(line => {
+    const [key, ...valueParts] = line.split(':');
+    if (key && valueParts.length) {
+      const value = valueParts.join(':').trim();
+      
+      // Parse arrays (tags)
+      if (value.startsWith('[') && value.endsWith(']')) {
+        attributes[key.trim()] = value
+          .substring(1, value.length - 1)
+          .split(',')
+          .map(item => item.trim());
+      } else {
+        attributes[key.trim()] = value;
+      }
+    }
+  });
+  
+  return { attributes, body };
+};
+
 const Home: React.FC = () => {
   const [allRecipes, setAllRecipes] = useState<Recipe[]>([]);
   const [filteredRecipes, setFilteredRecipes] = useState<Recipe[]>([]);
@@ -24,38 +58,52 @@ const Home: React.FC = () => {
     // Function to fetch recipes from GitHub
     const fetchRecipes = async () => {
       try {
-        // This would be replaced with your GitHub API call
-        // For demonstration, we'll use sample data
+        // GitHub repository information
+        const username = 'your-github-username'; // Replace with your GitHub username
+        const repo = 'cooking-blog'; // Replace with your repository name
         
-        const sampleRecipes: Recipe[] = [
-          {
-            id: 'chocolate-cake',
-            title: 'Chocolate Cake',
-            description: 'Rich and moist chocolate cake with ganache frosting',
-            date: '2025-03-28',
-            thumbnail: `${import.meta.env.BASE_URL}recipes/chocolate-cake/assets/thumbnail.png`,
-            tags: ['dessert', 'chocolate', 'baking']
-          },
-          {
-            id: 'pasta-carbonara',
-            title: 'Pasta Carbonara',
-            description: 'Classic Italian pasta with egg, cheese, and pancetta',
-            date: '2025-03-15',
-            thumbnail: `${import.meta.env.BASE_URL}recipes/pasta-carbonara/assets/thumbnail.png`,
-            tags: ['pasta', 'italian', 'dinner']
-          },
-          {
-            id: 'avocado-toast',
-            title: 'Avocado Toast',
-            description: 'Simple and nutritious breakfast with avocado and sourdough',
-            date: '2025-03-01',
-            thumbnail: `${import.meta.env.BASE_URL}recipes/avocado-toast/assets/thumbnail.png`,
-            tags: ['breakfast', 'healthy', 'quick']
-          }
-        ];
+        // Fetch recipe directories from GitHub
+        const response = await fetch(`https://api.github.com/repos/${username}/${repo}/contents/recipes`);
+        
+        if (!response.ok) {
+          throw new Error(`GitHub API error: ${response.status}`);
+        }
+        
+        const directories = await response.json();
+        
+        // Process each recipe directory
+        const recipes = await Promise.all(directories
+          .filter((item: any) => item.type === 'dir')
+          .map(async (dir: any) => {
+            // Fetch README.md for each recipe
+            const readmeURL = `https://raw.githubusercontent.com/${username}/${repo}/main/recipes/${dir.name}/README.md`;
+            const readmeResponse = await fetch(readmeURL);
+            
+            if (!readmeResponse.ok) {
+              console.warn(`Could not fetch README for ${dir.name}`);
+              return null;
+            }
+            
+            const content = await readmeResponse.text();
+            
+            // Parse frontmatter from markdown
+            const { attributes, body } = parseFrontmatter(content);
+            
+            return {
+              id: dir.name,
+              title: attributes.title || dir.name,
+              description: attributes.description || '',
+              date: attributes.date || new Date().toISOString(),
+              thumbnail: `${import.meta.env.BASE_URL}recipes/${dir.name}/assets/thumbnail.png`,
+              tags: attributes.tags || []
+            };
+          }));
+        
+        // Filter out any null values (failed fetches)
+        const validRecipes = recipes.filter(recipe => recipe !== null) as Recipe[];
         
         // Sort recipes by date (newest first)
-        const sortedRecipes = sampleRecipes.sort((a, b) => 
+        const sortedRecipes = validRecipes.sort((a, b) => 
           new Date(b.date).getTime() - new Date(a.date).getTime()
         );
         
@@ -66,6 +114,10 @@ const Home: React.FC = () => {
         setError('Failed to load recipes');
         setIsLoading(false);
         console.error('Error fetching recipes:', err);
+    
+        setAllRecipes([]);
+        setFilteredRecipes([]);
+        setIsLoading(false);
       }
     };
 
