@@ -37,7 +37,9 @@ const RecipeDetail: React.FC = () => {
 
         // Fetch README.md for the recipe
         const readmeURL = `https://raw.githubusercontent.com/${username}/${repo}/main/recipes/${id}/README.md`;
+        console.log('Fetching recipe from:', readmeURL);
         const response = await fetch(readmeURL);
+        console.log('Response:', response);
 
         if (!response.ok) {
           throw new Error(`Could not fetch recipe: ${response.status}`);
