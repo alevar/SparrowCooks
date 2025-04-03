@@ -32,9 +32,8 @@ const RecipeDetail: React.FC = () => {
   useEffect(() => {
     const fetchRecipe = async () => {
       try {
-        // GitHub repository information
-        const username = 'your-github-username'; // Replace with your GitHub username
-        const repo = 'cooking-blog'; // Replace with your repository name
+        const username = 'alevar';
+        const repo = 'SparrowCooks';
 
         // Fetch README.md for the recipe
         const readmeURL = `https://raw.githubusercontent.com/${username}/${repo}/main/recipes/${id}/README.md`;
