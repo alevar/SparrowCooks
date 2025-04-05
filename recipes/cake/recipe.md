@@ -31,6 +31,7 @@ I finally got my mom and my grandma to revise this recipe and prepare the recipe
 4. The batter I prepare in a mixer: add all ingredients one-by-one, first eggs with sugar, then sour cream, flour, baking soda (or baking powder with flour). I find this easier, naturally, but could be prepared by hand.
 
 ![Mixing the batter](./assets/test1.ingredients.jpg)
+![mixing more](./assets/test1.baked.jpg)
 
 ## Attempt 1
 
