@@ -1,228 +1,175 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
+import { Container, Row, Col, Badge } from 'react-bootstrap';
 import { useParams, Link } from 'react-router-dom';
-import { Container, Row, Col, Badge, Spinner, Alert } from 'react-bootstrap';
-import { Clock, ArrowLeft, Calendar, People, Star } from 'react-bootstrap-icons';
+import { Clock, ArrowLeft } from 'react-bootstrap-icons';
+import * as commons from '../../utils/common';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
-import './RecipeDetail.css';
-
-interface RecipeParams {
-  id: string;
-}
-
-interface RecipeFrontmatter {
-  title: string;
-  description: string;
-  date: string;
-  tags: string[];
-  prepTime?: string;
-  cookTime?: string;
-  servings?: number;
-  difficulty?: string;
-}
+import ImageCarousel from "../ImageCarousel/ImageCarousel";
+import "./RecipeDetail.css";
 
 const RecipeDetail: React.FC = () => {
-  const { id } = useParams<RecipeParams>();
-  const [markdown, setMarkdown] = useState<string>('');
-  const [frontmatter, setFrontmatter] = useState<RecipeFrontmatter | null>(null);
+  const { recipeId } = useParams<{ recipeId: string }>();
+  const [recipe, setRecipe] = useState<commons.Recipe | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchRecipe = async () => {
+    const loadRecipe = async () => {
+      if (!recipeId) {
+        setError('Recipe not found');
+        setIsLoading(false);
+        return;
+      }
+
       try {
-        const username = 'alevar';
-        const repo = 'SparrowCooks';
-
-        // Fetch README.md for the recipe
-        const readmeURL = `https://raw.githubusercontent.com/${username}/${repo}/main/recipes/${id}/README.md`;
-        console.log('Fetching recipe from:', readmeURL);
-        const response = await fetch(readmeURL);
-        console.log('Response:', response);
-
-        if (!response.ok) {
-          throw new Error(`Could not fetch recipe: ${response.status}`);
+        const recipeData = await commons.fetchRecipeById(recipeId);
+        if (!recipeData) {
+          setError('Recipe not found');
+          setIsLoading(false);
+          return;
         }
-
-        const content = await response.text();
-
-        // Parse frontmatter from markdown
-        const frontmatterRegex = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/;
-        const match = content.match(frontmatterRegex);
-
-        if (match) {
-          const frontmatterText = match[1];
-          const bodyText = match[2];
-
-          // Parse frontmatter into key-value pairs
-          const attributes: Record<string, any> = {};
-          frontmatterText.split('\n').forEach(line => {
-            const [key, ...valueParts] = line.split(':');
-            if (key && valueParts.length) {
-              const value = valueParts.join(':').trim();
-
-              // Parse arrays (tags)
-              if (value.startsWith('[') && value.endsWith(']')) {
-                attributes[key.trim()] = value
-                  .substring(1, value.length - 1)
-                  .split(',')
-                  .map(item => item.trim());
-              } else {
-                attributes[key.trim()] = value;
-              }
-            }
-          });
-
-          setFrontmatter(attributes as RecipeFrontmatter);
-          
-          // Process image paths in markdown to use correct BASE_URL
-          const processedMarkdown = bodyText.replace(
-            /!\[(.*?)\]\((\.\/assets\/.*?)\)/g, 
-            `![$1](${import.meta.env.BASE_URL}recipes/${id}/$2)`
-          );
-          
-          setMarkdown(processedMarkdown);
-        } else {
-          setMarkdown(content);
-        }
-
+        setRecipe(recipeData);
         setIsLoading(false);
-      } catch (err) {
-        setError('Failed to load recipe');
+      } catch (error) {
+        console.error('Failed to load recipe:', error);
+        setError('Failed to load recipe. Please try again later.');
         setIsLoading(false);
-        console.error('Error fetching recipe:', err);
       }
     };
 
-    if (id) {
-      fetchRecipe();
-    }
-  }, [id]);
+    setIsLoading(true);
+    loadRecipe();
+  }, [recipeId]);
 
   if (isLoading) {
     return (
       <Container className="my-5 text-center">
-        <Spinner animation="border" role="status">
+        <div className="spinner-border" role="status">
           <span className="visually-hidden">Loading...</span>
-        </Spinner>
-      </Container>
-    );
-  }
-
-  if (error) {
-    return (
-      <Container className="my-5">
-        <Alert variant="danger">
-          {error}
-        </Alert>
-        <div className="text-center mt-4">
-          <Link to="/" className="btn btn-outline-primary">
-            <ArrowLeft className="me-2" />
-            Back to Recipes
-          </Link>
         </div>
       </Container>
     );
   }
+
+  if (error || !recipe) {
+    return (
+      <Container className="my-5">
+        <div className="alert alert-danger" role="alert">
+          {error || 'Recipe not found'}
+        </div>
+        <Link to="/" className="btn btn-primary mt-3">
+          <ArrowLeft className="me-2" /> Back to Recipes
+        </Link>
+      </Container>
+    );
+  }
+
+  const splitContent = (markdown: string): (string | JSX.Element)[] => {
+    const imageRegex = /!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g;
+    const lines = markdown.split('\n');
+    const result: (string | JSX.Element)[] = [];
+
+    let buffer: string[] = [];
+    let imageGroup: { src: string; alt: string }[] = [];
+
+    const flushText = () => {
+      if (buffer.length > 0) {
+        result.push(buffer.join('\n'));
+        buffer = [];
+      }
+    };
+
+    const flushImages = () => {
+      if (imageGroup.length > 0) {
+        result.push(<ImageCarousel images={imageGroup} key={result.length} />);
+        imageGroup = [];
+      }
+    };
+
+    for (const line of lines) {
+      const match = [...line.matchAll(imageRegex)];
+      if (match.length > 0 && line.trim() === match.map(m => m[0]).join('').trim()) {
+        // Line contains only image(s)
+        flushText();
+        match.forEach(m => {
+          imageGroup.push({ alt: m[1], src: m[2] });
+        });
+      } else {
+        flushImages();
+        buffer.push(line);
+      }
+    }
+
+    flushText();
+    flushImages();
+
+    return result;
+  };
+
+  const renderedContent = splitContent(recipe.content || '');
 
   return (
     <Container className="my-5 recipe-detail">
       <Link to="/" className="btn btn-outline-secondary mb-4">
-        <ArrowLeft className="me-2" />
-        Back to Recipes
+        <ArrowLeft className="me-2" /> Back to Recipes
       </Link>
-
-      {frontmatter && (
-        <div className="recipe-header mb-4">
-          <h1 className="mb-3">{frontmatter.title}</h1>
-          <p className="lead">{frontmatter.description}</p>
-          
-          <div className="recipe-meta d-flex flex-wrap gap-3 mb-4">
-            {frontmatter.date && (
-              <div className="recipe-meta-item">
-                <Calendar className="me-1" />
-                <span>Published: {new Date(frontmatter.date).toLocaleDateString()}</span>
-              </div>
-            )}
-            
-            {frontmatter.prepTime && (
-              <div className="recipe-meta-item">
-                <Clock className="me-1" />
-                <span>Prep: {frontmatter.prepTime}</span>
-              </div>
-            )}
-            
-            {frontmatter.cookTime && (
-              <div className="recipe-meta-item">
-                <Clock className="me-1" />
-                <span>Cook: {frontmatter.cookTime}</span>
-              </div>
-            )}
-            
-            {frontmatter.servings && (
-              <div className="recipe-meta-item">
-                <People className="me-1" />
-                <span>Serves: {frontmatter.servings}</span>
-              </div>
-            )}
-            
-            {frontmatter.difficulty && (
-              <div className="recipe-meta-item">
-                <Star className="me-1" />
-                <span>Difficulty: {frontmatter.difficulty}</span>
-              </div>
-            )}
-          </div>
-          
-          <div className="recipe-tags mb-4">
-            {frontmatter.tags && frontmatter.tags.map(tag => (
-              <Badge 
-                key={tag} 
-                bg="light" 
-                text="dark" 
-                className="me-2 p-2"
-              >
-                {tag}
-              </Badge>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="recipe-content">
-        <ReactMarkdown 
-          remarkPlugins={[remarkGfm]} 
-          rehypePlugins={[rehypeRaw]}
-          components={{
-            img: ({ node, ...props }) => (
-              <img 
-                className="img-fluid rounded my-3" 
-                {...props} 
-                alt={props.alt || 'Recipe image'} 
-              />
-            ),
-            h2: ({ node, ...props }) => (
-              <h2 className="mt-4 mb-3" {...props} />
-            ),
-            ul: ({ node, ...props }) => (
-              <ul className="my-3" {...props} />
-            ),
-            ol: ({ node, ...props }) => (
-              <ol className="my-3" {...props} />
-            )
-          }}
-        >
-          {markdown}
-        </ReactMarkdown>
-      </div>
       
-      <div className="text-center mt-5">
-        <Link to="/" className="btn btn-outline-primary">
-          <ArrowLeft className="me-2" />
-          Back to All Recipes
-        </Link>
-      </div>
+      <Row className="mb-4">
+        <Col>
+          <h1 className="mb-3">{recipe.title}</h1>
+          
+          <div className="d-flex flex-wrap align-items-center mb-3">
+            <div className="me-3 text-muted">
+              <Clock className="me-1" /> {new Date(recipe.date).toLocaleDateString()}
+            </div>
+            <div>
+              {recipe.tags.map(tag => (
+                <Badge bg="light" text="dark" key={tag} className="me-2 mb-2">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          </div>
+          
+          <p className="lead">{recipe.description}</p>
+        </Col>
+      </Row>
+      
+      <Row>
+        <Col className="recipe-content">
+          {renderedContent.map((block, index) =>
+            typeof block === 'string' ? (
+              <ReactMarkdown
+                key={index}
+                components={{
+                  h2: ({ node, ...props }) => (
+                    <h2 className="mt-5 mb-3" {...props} />
+                  ),
+                  h3: ({ node, ...props }) => (
+                    <h3 className="mt-4 mb-3" {...props} />
+                  ),
+                  p: ({ node, ...props }) => (
+                    <p className="mb-3" {...props} />
+                  ),
+                  ul: ({ node, ...props }) => (
+                    <ul className="mb-4" {...props} />
+                  ),
+                  ol: ({ node, ...props }) => (
+                    <ol className="mb-4" {...props} />
+                  ),
+                  li: ({ node, ...props }) => (
+                    <li className="mb-2" {...props} />
+                  ),
+                }}
+              >
+                {block}
+              </ReactMarkdown>
+            ) : (
+              block // JSX <ImageCarousel />
+            )
+          )}
+        </Col>
+      </Row>
     </Container>
   );
 };
